@@ -12,9 +12,13 @@ const trackedItemSchema = new mongoose.Schema({
 }, { _id: true });
 
 const userSchema = new mongoose.Schema({
-  email: { type: String, unique: true, sparse: true, trim: true, lowercase: true },
-  password: { type: String },
-  socialProviderId: { type: String }, // optional for social logins
+  email: { type: String, required: true, unique: true, trim: true, lowercase: true },
+  username: { type: String, required: true, trim: true },
+  password: { type: String, minlength: 6 },
+  socialProvider: {
+    type: { type: String, enum: ['google', 'facebook', 'github'] },
+    id: String
+  },
   trackedItems: { type: [trackedItemSchema], default: [] },
   createdAt: { type: Date, default: Date.now }
 });

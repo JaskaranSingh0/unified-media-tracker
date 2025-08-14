@@ -1,8 +1,49 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
 
-const findTrackedItem = (user, itemId) => {
-  return user.trackedItems.id(itemId);
+// Helper function to sort tracked items
+const sortItems = (items, sortBy = 'dateAdded', order = 'desc') => {
+  return [...items].sort((a, b) => {
+    if (sortBy === 'dateAdded') {
+      return order === 'desc' ? b.dateAdded - a.dateAdded : a.dateAdded - b.dateAdded;
+    }
+    if (sortBy === 'rating') {
+      const ratingA = a.rating || 0;
+      const ratingB = b.rating || 0;
+      return order === 'desc' ? ratingB - ratingA : ratingA - ratingB;
+    }
+    if (sortBy === 'dateCompleted') {
+      const dateA = a.dateCompleted || new Date(0);
+      const dateB = b.dateCompleted || new Date(0);
+      return order === 'desc' ? dateB - dateA : dateA - dateB;
+    }
+    return 0;
+  });
+};
+
+// Helper function to filter tracked items
+const filterItems = (items, filters) => {
+  return items.filter(item => {
+    let match = true;
+    
+    if (filters.mediaType && item.mediaType !== filters.mediaType) {
+      match = false;
+    }
+    
+    if (filters.status && item.status !== filters.status) {
+      match = false;
+    }
+    
+    if (filters.minRating && (!item.rating || item.rating < filters.minRating)) {
+      match = false;
+    }
+    
+    if (filters.maxRating && (!item.rating || item.rating > filters.maxRating)) {
+      match = false;
+    }
+    
+    return match;
+  });
 };
 
 exports.addItem = async (req, res) => {
