@@ -2,7 +2,7 @@ const User = require('../models/User');
 
 exports.getDashboardStats = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user._id);
     
     const stats = {
       total: {

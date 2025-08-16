@@ -12,6 +12,8 @@ export default function Header() {
           {token ? (
             <>
               <Link to="/search" className="nav-link">Search</Link>
+              <Link to="/lists" className="nav-link">My Lists</Link>
+              <Link to="/settings" className="nav-link">Settings</Link>
               <button onClick={logout} className="btn-ghost">Logout</button>
             </>
           ) : (

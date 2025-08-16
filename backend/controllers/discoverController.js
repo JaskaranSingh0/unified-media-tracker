@@ -8,6 +8,40 @@ const tmdbKey = process.env.TMDB_API_KEY;
 
 const buildTmdbImage = (path) => (path ? `https://image.tmdb.org/t/p/w500${path}` : null);
 
+// Default axios config for TMDB requests
+const tmdbAxiosConfig = {
+  timeout: 15000, // Increased timeout
+  headers: {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'Accept': 'application/json',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'keep-alive'
+  }
+};
+
+// Retry function for TMDB API calls
+const retryTmdbRequest = async (requestFn, maxRetries = 3, baseDelay = 1000) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await requestFn();
+    } catch (error) {
+      const isLastAttempt = attempt === maxRetries;
+      const isRetryableError = error.code === 'ECONNRESET' || 
+                              error.code === 'ETIMEDOUT' || 
+                              error.code === 'ENOTFOUND' ||
+                              (error.response && error.response.status >= 500);
+      
+      if (isLastAttempt || !isRetryableError) {
+        throw error;
+      }
+      
+      const delay = baseDelay * Math.pow(2, attempt - 1); // Exponential backoff
+      console.log(`TMDB API request failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+};
+
 exports.search = async (req, res) => {
   try {
     const q = req.query.q;
@@ -30,30 +64,38 @@ exports.search = async (req, res) => {
         // skip TMDB if no key
         console.warn('TMDB_API_KEY missing - skipping TMDB requests for search');
       } else {
-        const tmdbRes = await axios.get(`${TMDB_BASE}/search/multi`, {
-          params: { api_key: tmdbKey, query: q, include_adult: false }
-        });
-        tmdbRes.data.results.forEach(r => {
-          if (r.media_type === 'movie') {
-            results.movies.push({
-              apiId: r.id,
-              mediaType: 'movie',
-              title: r.title || r.name,
-              overview: r.overview,
-              poster: buildTmdbImage(r.poster_path),
-              releaseDate: r.release_date
+        try {
+          const tmdbRes = await retryTmdbRequest(async () => {
+            return await axios.get(`${TMDB_BASE}/search/multi`, {
+              params: { api_key: tmdbKey, query: q, include_adult: false },
+              ...tmdbAxiosConfig
             });
-          } else if (r.media_type === 'tv') {
-            results.tv.push({
-              apiId: r.id,
-              mediaType: 'tv',
-              title: r.name,
-              overview: r.overview,
-              poster: buildTmdbImage(r.poster_path),
-              firstAirDate: r.first_air_date
-            });
-          }
-        });
+          });
+          
+          tmdbRes.data.results.forEach(r => {
+            if (r.media_type === 'movie') {
+              results.movies.push({
+                apiId: r.id,
+                mediaType: 'movie',
+                title: r.title || r.name,
+                overview: r.overview,
+                poster: buildTmdbImage(r.poster_path),
+                releaseDate: r.release_date
+              });
+            } else if (r.media_type === 'tv') {
+              results.tv.push({
+                apiId: r.id,
+                mediaType: 'tv',
+                title: r.name,
+                overview: r.overview,
+                poster: buildTmdbImage(r.poster_path),
+                firstAirDate: r.first_air_date
+              });
+            }
+          });
+        } catch (tmdbError) {
+          console.warn('TMDB search failed (non-fatal):', tmdbError.message);
+        }
       }
     }
 
@@ -62,29 +104,39 @@ exports.search = async (req, res) => {
       // Use AniList GraphQL API
       try {
         const query = `
-          query ($search: String) {
-            Media(search: $search, type: ANIME) {
-              id
-              title { romaji english native }
-              description
-              coverImage { large }
-              episodes
-              status
+          query ($search: String, $page: Int) {
+            Page(page: $page, perPage: 10) {
+              media(search: $search, type: ANIME, sort: POPULARITY_DESC) {
+                id
+                title { romaji english native }
+                description
+                coverImage { large }
+                episodes
+                status
+              }
             }
           }
         `;
-        const variables = { search: q };
-        const anilistRes = await axios.post('https://graphql.anilist.co', { query, variables }, { headers: { 'Content-Type': 'application/json' } });
-        if (anilistRes.data && anilistRes.data.data && anilistRes.data.data.Media) {
-          const m = anilistRes.data.data.Media;
-          results.anime.push({
-            apiId: m.id,
-            mediaType: 'anime',
-            title: m.title.english || m.title.romaji || m.title.native,
-            overview: (m.description || '').replace(/<[^>]+>/g, ''),
-            poster: m.coverImage && m.coverImage.large,
-            episodes: m.episodes,
-            status: m.status
+        const variables = { search: q, page: 1 };
+        const anilistRes = await axios.post('https://graphql.anilist.co', { 
+          query, 
+          variables 
+        }, { 
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000
+        });
+        
+        if (anilistRes.data && anilistRes.data.data && anilistRes.data.data.Page && anilistRes.data.data.Page.media) {
+          anilistRes.data.data.Page.media.forEach(m => {
+            results.anime.push({
+              apiId: m.id,
+              mediaType: 'anime',
+              title: m.title.english || m.title.romaji || m.title.native,
+              overview: (m.description || '').replace(/<[^>]+>/g, ''),
+              poster: m.coverImage && m.coverImage.large,
+              episodes: m.episodes,
+              status: m.status
+            });
           });
         }
       } catch (err) {
@@ -110,24 +162,41 @@ exports.trending = async (req, res) => {
 
     if (!tmdbKey) return res.status(400).json({ error: 'TMDB_API_KEY not configured' });
 
-    // call TMDB trending endpoint
+    // call TMDB trending endpoint with timeout and retry logic
     const url = `${TMDB_BASE}/trending/${type}/week`;
-    const tmdbRes = await axios.get(url, { params: { api_key: tmdbKey } });
+    
+    try {
+      const tmdbRes = await retryTmdbRequest(async () => {
+        return await axios.get(url, { 
+          params: { api_key: tmdbKey },
+          ...tmdbAxiosConfig
+        });
+      });
 
-    const items = tmdbRes.data.results.map(r => ({
-      apiId: r.id,
-      mediaType: type,
-      title: r.title || r.name,
-      overview: r.overview,
-      poster: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null,
-      popularity: r.popularity,
-      releaseDate: r.release_date || r.first_air_date
-    }));
-    cache.set(cacheKey, items);
-    return res.json(items);
+      const items = tmdbRes.data.results.map(r => ({
+        apiId: r.id,
+        mediaType: type,
+        title: r.title || r.name,
+        overview: r.overview,
+        poster: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null,
+        popularity: r.popularity,
+        releaseDate: r.release_date || r.first_air_date
+      }));
+      
+      cache.set(cacheKey, items);
+      return res.json(items);
+    } catch (apiError) {
+      console.error('TMDB API error:', apiError.message);
+      
+      // Return fallback empty data instead of failing
+      const fallbackData = [];
+      cache.set(cacheKey, fallbackData, 60); // Cache for 1 minute to avoid repeated failures
+      return res.json(fallbackData);
+    }
   } catch (err) {
     console.error('trending error', err);
-    return res.status(500).json({ error: 'Server error' });
+    // Return empty array instead of 500 error
+    return res.json([]);
   }
 };
 
@@ -137,20 +206,32 @@ exports.getDetails = async (req, res) => {
     if (!type || !id) return res.status(400).json({ error: 'type and id required' });
 
     if ((type === 'movie' || type === 'tv') && tmdbKey) {
-      const url = `${TMDB_BASE}/${type}/${id}`;
-      const tmdbRes = await axios.get(url, { params: { api_key: tmdbKey } });
-      const r = tmdbRes.data;
-      return res.json({
-        apiId: r.id,
-        mediaType: type,
-        title: r.title || r.name,
-        overview: r.overview,
-        poster: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null,
-        genres: r.genres,
-        runtime: r.runtime || r.episode_run_time,
-        seasons: r.seasons || null,
-        raw: r
-      });
+      try {
+        const url = `${TMDB_BASE}/${type}/${id}`;
+        const tmdbRes = await retryTmdbRequest(async () => {
+          return await axios.get(url, { 
+            params: { api_key: tmdbKey },
+            ...tmdbAxiosConfig
+          });
+        });
+        
+        const r = tmdbRes.data;
+        return res.json({
+          apiId: r.id,
+          mediaType: type,
+          title: r.title || r.name,
+          overview: r.overview,
+          poster: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null,
+          genres: r.genres,
+          runtime: r.runtime || r.episode_run_time,
+          seasons: r.seasons || null,
+          numberOfSeasons: r.number_of_seasons || null,
+          raw: r
+        });
+      } catch (tmdbError) {
+        console.error('TMDB details error:', tmdbError.message);
+        return res.status(404).json({ error: 'Media not found or API unavailable' });
+      }
     } else if (type === 'anime') {
       // AniList lookup
       try {

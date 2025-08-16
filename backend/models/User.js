@@ -3,6 +3,11 @@ const mongoose = require('mongoose');
 const trackedItemSchema = new mongoose.Schema({
   apiId: { type: Number, required: true },
   mediaType: { type: String, enum: ['movie', 'tv', 'anime'], required: true },
+  title: { type: String, required: true },
+  poster: { type: String },
+  overview: { type: String },
+  releaseDate: { type: String },
+  firstAirDate: { type: String },
   status: { type: String, enum: ['planToWatch', 'watching', 'completed'], default: 'planToWatch' },
   rating: { type: Number, min: 1, max: 10 },
   selfNote: { type: String },
@@ -25,7 +30,21 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true
+    required: function() {
+      // Password is required only if no social provider
+      return !this.socialProvider || !this.socialProvider.type;
+    }
+  },
+  socialProvider: {
+    type: {
+      type: String,
+      enum: ['google'],
+      required: false
+    },
+    id: {
+      type: String,
+      required: false
+    }
   },
   trackedItems: { type: [trackedItemSchema], default: [] }
 });

@@ -2,46 +2,58 @@ const User = require('../models/User');
 const axios = require('axios');
 
 const getSimilarTMDB = async (mediaType, id) => {
-  const response = await axios.get(
-    `https://api.themoviedb.org/3/${mediaType}/${id}/similar`,
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.TMDB_ACCESS_TOKEN}`
+  try {
+    const response = await axios.get(
+      `https://api.themoviedb.org/3/${mediaType}/${id}/similar`,
+      {
+        params: {
+          api_key: process.env.TMDB_API_KEY
+        },
+        timeout: 10000
       }
-    }
-  );
-  return response.data.results;
+    );
+    return response.data.results;
+  } catch (error) {
+    console.warn(`TMDB similar ${mediaType} failed:`, error.message);
+    return [];
+  }
 };
 
 const getSimilarAnime = async (id) => {
-  const query = `
-    query ($id: Int) {
-      Media(id: $id) {
-        recommendations(sort: RATING_DESC) {
-          nodes {
-            mediaRecommendation {
-              id
-              title { userPreferred }
-              coverImage { large }
-              description
-              averageScore
+  try {
+    const query = `
+      query ($id: Int) {
+        Media(id: $id) {
+          recommendations(sort: RATING_DESC) {
+            nodes {
+              mediaRecommendation {
+                id
+                title { userPreferred }
+                coverImage { large }
+                description
+                averageScore
+              }
             }
           }
         }
       }
-    }
-  `;
+    `;
 
-  const response = await axios.post('https://graphql.anilist.co', {
-    query,
-    variables: { id }
-  });
-  return response.data.data.Media.recommendations.nodes.map(n => n.mediaRecommendation);
+    const response = await axios.post('https://graphql.anilist.co', {
+      query,
+      variables: { id }
+    }, { timeout: 10000 });
+    
+    return response.data.data.Media.recommendations.nodes.map(n => n.mediaRecommendation);
+  } catch (error) {
+    console.warn('AniList similar anime failed:', error.message);
+    return [];
+  }
 };
 
 exports.getRecommendations = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user._id);
     const recommendations = {
       movies: [],
       tv: [],

@@ -7,7 +7,12 @@ const auth = async (req, res, next) => {
     if (!header || !header.startsWith('Bearer ')) {
       return res.status(401).json({ error: 'No token provided' });
     }
+    
     const token = header.split(' ')[1];
+    if (!token || token === 'null' || token === 'undefined') {
+      return res.status(401).json({ error: 'Invalid token format' });
+    }
+    
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error('JWT_SECRET not set');
 
@@ -18,8 +23,16 @@ const auth = async (req, res, next) => {
     req.user = user;
     next();
   } catch (err) {
-    console.error('Auth middleware error:', err.message);
-    return res.status(401).json({ error: 'Authentication failed' });
+    if (err.name === 'JsonWebTokenError') {
+      console.error('Auth middleware error: Invalid JWT -', err.message);
+      return res.status(401).json({ error: 'Invalid token' });
+    } else if (err.name === 'TokenExpiredError') {
+      console.error('Auth middleware error: Token expired');
+      return res.status(401).json({ error: 'Token expired' });
+    } else {
+      console.error('Auth middleware error:', err.message);
+      return res.status(401).json({ error: 'Authentication failed' });
+    }
   }
 };
 

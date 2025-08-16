@@ -8,6 +8,9 @@ const genToken = (id) => {
   return jwt.sign({ id }, secret, { expiresIn });
 };
 
+// Export for use in routes
+exports.generateToken = genToken;
+
 exports.register = async (req, res) => {
   try {
     const { email, password, username } = req.body;

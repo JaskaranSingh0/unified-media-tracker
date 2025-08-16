@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { discoverDetails, addListItem, getLists, updateListItem } from '../utils/api';
+import { discoverDetails, addListItem, getLists, updateListItem, toggleSeason } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 export default function MediaDetail() {
@@ -29,7 +29,17 @@ export default function MediaDetail() {
   useEffect(() => { load(); }, [type, id]);
 
   const addToList = async () => {
-    const res = await addListItem(token, { apiId: details.apiId, mediaType: details.mediaType, status });
+    const payload = {
+      apiId: details.apiId,
+      mediaType: details.mediaType,
+      status,
+      title: details.title,
+      poster: details.poster,
+      overview: details.overview,
+      releaseDate: details.releaseDate,
+      firstAirDate: details.firstAirDate
+    };
+    const res = await addListItem(token, payload);
     setMyItem(res.item);
   };
 
@@ -39,35 +49,114 @@ export default function MediaDetail() {
     setMyItem(res.item);
   };
 
+  const handleSeasonToggle = async (seasonNumber) => {
+    if (!myItem) return;
+    try {
+      const totalSeasons = details?.numberOfSeasons;
+      const res = await toggleSeason(token, myItem._id, seasonNumber, totalSeasons);
+      setMyItem(res.item);
+      
+      // Update status based on season progress
+      if (res.item.status !== status) {
+        setStatus(res.item.status);
+      }
+    } catch (err) {
+      console.error('Error toggling season:', err);
+    }
+  };
+
+  const renderSeasonTracker = () => {
+    if (!myItem || details?.mediaType === 'movie') return null;
+
+    // Get seasons to display (either from details or based on watched seasons)
+    const totalSeasons = details?.numberOfSeasons || Math.max(...(myItem.watchedSeasons || []), 5);
+    const seasons = Array.from({ length: totalSeasons }, (_, i) => i + 1);
+
+    return (
+      <div className="season-tracker">
+        <h4>Season Progress</h4>
+        <div className="seasons-grid">
+          {seasons.map(seasonNum => {
+            const isWatched = myItem.watchedSeasons?.includes(seasonNum);
+            return (
+              <button
+                key={seasonNum}
+                className={`season-button ${isWatched ? 'watched' : 'unwatched'}`}
+                onClick={() => handleSeasonToggle(seasonNum)}
+                title={`Season ${seasonNum} - ${isWatched ? 'Watched' : 'Not watched'}`}
+              >
+                S{seasonNum}
+                {isWatched && <span className="checkmark">✓</span>}
+              </button>
+            );
+          })}
+        </div>
+        {myItem.watchedSeasons?.length > 0 && (
+          <div className="progress-summary">
+            Watched {myItem.watchedSeasons.length} of {totalSeasons} seasons
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div>
+    <div className="media-detail">
       <h1>{details ? details.title : 'Loading...'}</h1>
       {details && (
-        <div className="detail">
-          {details.poster && <img src={details.poster} alt={details.title} className="poster" />}
-          <div>
-            <p>{details.overview}</p>
-            <div>
-              <label>Status</label>
-              <select value={status} onChange={e => setStatus(e.target.value)}>
-                <option value="planToWatch">Plan to Watch</option>
-                <option value="watching">Watching</option>
-                <option value="completed">Completed</option>
-              </select>
+        <div className="detail-content">
+          <div className="detail-poster">
+            {details.poster && <img src={details.poster} alt={details.title} />}
+          </div>
+          
+          <div className="detail-info">
+            <p className="overview">{details.overview}</p>
+            
+            <div className="tracking-controls">
+              <div className="control-group">
+                <label>Status</label>
+                <select value={status} onChange={e => setStatus(e.target.value)}>
+                  <option value="planToWatch">Plan to Watch</option>
+                  <option value="watching">Watching</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+              
+              <div className="control-group">
+                <label>Rating (1-10)</label>
+                <input 
+                  type="number" 
+                  min="1" 
+                  max="10" 
+                  value={rating || ''} 
+                  onChange={e => setRating(e.target.value ? Number(e.target.value) : null)} 
+                />
+              </div>
+              
+              <div className="control-group">
+                <label>Personal Note</label>
+                <textarea 
+                  value={note} 
+                  onChange={e => setNote(e.target.value)}
+                  placeholder="Write your thoughts..."
+                  rows="3"
+                />
+              </div>
+              
+              <div className="action-buttons">
+                {!myItem ? (
+                  <button className="primary-btn" onClick={addToList}>
+                    Add to My List
+                  </button>
+                ) : (
+                  <button className="primary-btn" onClick={saveEdits}>
+                    Save Changes
+                  </button>
+                )}
+              </div>
             </div>
-            <div>
-              <label>Rating (1-10)</label>
-              <input type="number" min="1" max="10" value={rating || ''} onChange={e => setRating(e.target.value ? Number(e.target.value) : null)} />
-            </div>
-            <div>
-              <label>Note</label>
-              <textarea value={note} onChange={e => setNote(e.target.value)} />
-            </div>
-            {!myItem ? (
-              <button onClick={addToList}>Add to My List</button>
-            ) : (
-              <button onClick={saveEdits}>Save</button>
-            )}
+            
+            {renderSeasonTracker()}
           </div>
         </div>
       )}

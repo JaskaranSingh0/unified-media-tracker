@@ -4,41 +4,74 @@ import { authLogin, authRegister, authMe, updateUserPassword, deleteUserAccount 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(() => localStorage.getItem('umt_token'));
+  const [token, setToken] = useState(() => {
+    const stored = localStorage.getItem('umt_token');
+    // Clean up invalid tokens from localStorage
+    if (stored === 'null' || stored === 'undefined' || !stored) {
+      localStorage.removeItem('umt_token');
+      return null;
+    }
+    return stored;
+  });
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const login = async (payload) => {
     setLoading(true);
-    const res = await authLogin(payload);
-    if (res.token) {
-      setToken(res.token);
-      localStorage.setItem('umt_token', res.token);
-      await fetchMe(res.token);
+    try {
+      const res = await authLogin(payload);
+      if (res.token) {
+        setToken(res.token);
+        localStorage.setItem('umt_token', res.token);
+        await fetchMe(res.token);
+      }
+      setLoading(false);
+      return res;
+    } catch (error) {
+      setLoading(false);
+      throw error;
     }
-    setLoading(false);
-    return res;
   };
 
   const register = async (payload) => {
     setLoading(true);
-    const res = await authRegister(payload);
-    if (res.token) {
-      setToken(res.token);
-      localStorage.setItem('umt_token', res.token);
-      await fetchMe(res.token);
+    try {
+      const res = await authRegister(payload);
+      if (res.token) {
+        setToken(res.token);
+        localStorage.setItem('umt_token', res.token);
+        await fetchMe(res.token);
+      }
+      setLoading(false);
+      return res;
+    } catch (error) {
+      setLoading(false);
+      throw error;
     }
-    setLoading(false);
-    return res;
+  };
+
+  const logout = () => {
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('umt_token');
   };
 
   const fetchMe = async (t = token) => {
     if (!t) return;
     try {
+      console.log('AuthContext: Fetching user profile...');
       const res = await authMe(t);
       setUser(res.user);
+      console.log('AuthContext: User profile loaded successfully');
     } catch (err) {
-      console.error('fetchMe failed', err);
+      console.error('AuthContext fetchMe failed:', err);
+      console.error('fetchMe error details:', {
+        message: err.message,
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        url: err.config?.url,
+        method: err.config?.method
+      });
       logout();
     }
   };
@@ -65,14 +98,23 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    if (token) fetchMe(token);
+    if (token) {
+      // Validate token format before making API call
+      try {
+        // Check if token looks like a JWT (has 3 parts separated by dots)
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+          console.warn('Invalid token format, clearing...');
+          logout();
+          return;
+        }
+        fetchMe(token);
+      } catch (error) {
+        console.error('Token validation error:', error);
+        logout();
+      }
+    }
   }, []);
-
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('umt_token');
-  };
 
   return (
     <AuthContext.Provider value={{ token, user, loading, login, register, logout, fetchMe, updatePassword, deleteAccount }}>
