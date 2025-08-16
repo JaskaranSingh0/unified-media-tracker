@@ -10,31 +10,18 @@ const genToken = (id) => {
 
 exports.register = async (req, res) => {
   try {
-    const { email, password, socialProviderId } = req.body;
-    if (!email && !socialProviderId) {
-      return res.status(400).json({ error: 'Email or socialProviderId required' });
+    const { email, password, username } = req.body;
+    if (!email || !password || !username) {
+      return res.status(400).json({ error: 'Email, password, and username are required' });
     }
-
-    // social signup
-    if (socialProviderId) {
-      let user = await User.findOne({ socialProviderId });
-      if (!user) {
-        user = await User.create({ socialProviderId, email });
-      }
-      const token = genToken(user._id);
-      return res.json({ token, user });
-    }
-
-    // email/password signup
-    if (!password) return res.status(400).json({ error: 'Password required for email signup' });
 
     let exists = await User.findOne({ email });
     if (exists) return res.status(400).json({ error: 'User already exists' });
 
     const hashed = await bcrypt.hash(password, 10);
-    const user = await User.create({ email, password: hashed });
+    const user = await User.create({ email, username, password: hashed });
     const token = genToken(user._id);
-    return res.json({ token, user: { _id: user._id, email: user.email } });
+    return res.json({ token, user: { _id: user._id, email: user.email, username: user.username } });
   } catch (err) {
     console.error('register error', err);
     return res.status(500).json({ error: 'Server error' });
@@ -43,23 +30,17 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { email, password, socialProviderId } = req.body;
-    if (socialProviderId) {
-      const user = await User.findOne({ socialProviderId });
-      if (!user) return res.status(400).json({ error: 'Social user not found' });
-      const token = genToken(user._id);
-      return res.json({ token, user });
-    }
+    const { email, password } = req.body;
 
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ error: 'User not found' });
+    if (!user || !user.password) return res.status(400).json({ error: 'Invalid credentials' });
 
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) return res.status(400).json({ error: 'Invalid credentials' });
 
     const token = genToken(user._id);
-    return res.json({ token, user: { _id: user._id, email: user.email } });
+    return res.json({ token, user: { _id: user._id, email: user.email, username: user.username } });
   } catch (err) {
     console.error('login error', err);
     return res.status(500).json({ error: 'Server error' });
@@ -76,6 +57,35 @@ exports.me = async (req, res) => {
   } catch (err) {
     console.error('me error', err);
     return res.status(500).json({ error: 'Server error' });
+  }
+};
+
+exports.updatePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new passwords are required' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters long' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user.password) {
+      return res.status(400).json({ error: 'Password cannot be changed for social login accounts.' });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Incorrect current password' });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (err) {
+    next(err);
   }
 };
 

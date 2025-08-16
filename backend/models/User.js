@@ -12,15 +12,22 @@ const trackedItemSchema = new mongoose.Schema({
 }, { _id: true });
 
 const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true, trim: true, lowercase: true },
-  username: { type: String, required: true, trim: true },
-  password: { type: String, minlength: 6 },
-  socialProvider: {
-    type: { type: String, enum: ['google', 'facebook', 'github'] },
-    id: String
+  username: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true
   },
-  trackedItems: { type: [trackedItemSchema], default: [] },
-  createdAt: { type: Date, default: Date.now }
+  email: {
+    type: String,
+    required: true,
+    unique: true
+  },
+  password: {
+    type: String,
+    required: true
+  },
+  trackedItems: { type: [trackedItemSchema], default: [] }
 });
 
 module.exports = mongoose.model('User', userSchema);

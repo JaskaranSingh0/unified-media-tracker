@@ -8,6 +8,7 @@ const auth = require('../middleware/auth');
 router.post('/register', authController.register);
 router.post('/login', authController.login);
 router.get('/me', auth, authController.me);
+router.put('/me/password', auth, authController.updatePassword);
 router.delete('/me', auth, authController.deleteAccount);
 
 // Google OAuth routes

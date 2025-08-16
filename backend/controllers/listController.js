@@ -1,6 +1,9 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
 
+// Helper to find a subdocument
+const findTrackedItem = (user, itemId) => user.trackedItems.id(itemId);
+
 // Helper function to sort tracked items
 const sortItems = (items, sortBy = 'dateAdded', order = 'desc') => {
   return [...items].sort((a, b) => {
@@ -107,11 +110,10 @@ exports.updateItem = async (req, res) => {
 exports.deleteItem = async (req, res) => {
   try {
     const { itemId } = req.params;
-    const user = await User.findById(req.user._id);
-    const item = findTrackedItem(user, itemId);
-    if (!item) return res.status(404).json({ error: 'Tracked item not found' });
-    item.remove();
-    await user.save();
+    await User.updateOne(
+      { _id: req.user._id },
+      { $pull: { trackedItems: { _id: itemId } } }
+    );
     return res.json({ ok: true });
   } catch (err) {
     console.error('deleteItem error', err);

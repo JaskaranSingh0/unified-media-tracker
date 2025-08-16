@@ -6,6 +6,7 @@ export default function Login() {
   const { login, register } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
   const [error, setError] = useState('');
@@ -15,7 +16,7 @@ export default function Login() {
     setError('');
     try {
       if (isRegister) {
-        const res = await register({ email, password });
+        const res = await register({ email, username, password });
         if (res.token) navigate('/');
       } else {
         const res = await login({ email, password });
@@ -23,7 +24,7 @@ export default function Login() {
       }
     } catch (err) {
       console.error(err);
-      setError(err.response?.data?.error || 'Login failed');
+      setError(err.response?.data?.error || 'Operation failed');
     }
   };
 
@@ -33,6 +34,12 @@ export default function Login() {
       <form onSubmit={submit}>
         <label>Email</label>
         <input required value={email} onChange={e => setEmail(e.target.value)} />
+        {isRegister && (
+          <>
+            <label>Username</label>
+            <input required value={username} onChange={e => setUsername(e.target.value)} />
+          </>
+        )}
         <label>Password</label>
         <input type="password" required value={password} onChange={e => setPassword(e.target.value)} />
         <button type="submit">{isRegister ? 'Register' : 'Login'}</button>
