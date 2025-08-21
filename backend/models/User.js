@@ -8,6 +8,8 @@ const trackedItemSchema = new mongoose.Schema({
   overview: { type: String },
   releaseDate: { type: String },
   firstAirDate: { type: String },
+  genres: { type: [String], default: [] }, // New field for genres
+  releaseYear: { type: Number }, // New field for release year
   status: { type: String, enum: ['planToWatch', 'watching', 'completed'], default: 'planToWatch' },
   rating: { type: Number, min: 1, max: 10 },
   selfNote: { type: String },

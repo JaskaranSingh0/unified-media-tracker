@@ -155,44 +155,89 @@ exports.search = async (req, res) => {
 
 exports.trending = async (req, res) => {
   try {
-    const type = req.query.type || 'movie'; // movie | tv
+    const type = req.query.type || 'movie'; // movie | tv | anime
     const cacheKey = `trending:${type}`;
     const cached = cache.get(cacheKey);
     if (cached) return res.json(cached);
 
-    if (!tmdbKey) return res.status(400).json({ error: 'TMDB_API_KEY not configured' });
+    let items = [];
 
-    // call TMDB trending endpoint with timeout and retry logic
-    const url = `${TMDB_BASE}/trending/${type}/week`;
-    
-    try {
-      const tmdbRes = await retryTmdbRequest(async () => {
-        return await axios.get(url, { 
-          params: { api_key: tmdbKey },
-          ...tmdbAxiosConfig
+    if (type === 'anime') {
+      // Use AniList for trending anime
+      const query = `
+        query {
+          Page(page: 1, perPage: 20) {
+            media(sort: TRENDING_DESC, type: ANIME) {
+              id
+              title { english romaji native }
+              coverImage { large }
+              description
+              genres
+              startDate { year }
+              popularity
+            }
+          }
+        }
+      `;
+
+      try {
+        const anilistRes = await axios.post('https://graphql.anilist.co', {
+          query
+        }, {
+          timeout: 15000,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
         });
-      });
 
-      const items = tmdbRes.data.results.map(r => ({
-        apiId: r.id,
-        mediaType: type,
-        title: r.title || r.name,
-        overview: r.overview,
-        poster: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null,
-        popularity: r.popularity,
-        releaseDate: r.release_date || r.first_air_date
-      }));
+        if (anilistRes.data && anilistRes.data.data && anilistRes.data.data.Page) {
+          items = anilistRes.data.data.Page.media.map(anime => ({
+            apiId: anime.id,
+            mediaType: 'anime',
+            title: anime.title.english || anime.title.romaji || anime.title.native,
+            overview: anime.description ? anime.description.replace(/<[^>]*>/g, '').substring(0, 300) + '...' : '',
+            poster: anime.coverImage?.large || null,
+            popularity: anime.popularity,
+            releaseDate: anime.startDate?.year ? `${anime.startDate.year}-01-01` : null,
+            genres: anime.genres
+          }));
+        }
+      } catch (anilistError) {
+        console.error('AniList API error:', anilistError.message);
+        items = []; // Return empty array if AniList fails
+      }
+    } else {
+      // Use TMDB for movies and TV shows
+      if (!tmdbKey) return res.status(400).json({ error: 'TMDB_API_KEY not configured' });
+
+      const url = `${TMDB_BASE}/trending/${type}/week`;
       
-      cache.set(cacheKey, items);
-      return res.json(items);
-    } catch (apiError) {
-      console.error('TMDB API error:', apiError.message);
-      
-      // Return fallback empty data instead of failing
-      const fallbackData = [];
-      cache.set(cacheKey, fallbackData, 60); // Cache for 1 minute to avoid repeated failures
-      return res.json(fallbackData);
+      try {
+        const tmdbRes = await retryTmdbRequest(async () => {
+          return await axios.get(url, { 
+            params: { api_key: tmdbKey },
+            ...tmdbAxiosConfig
+          });
+        });
+
+        items = tmdbRes.data.results.map(r => ({
+          apiId: r.id,
+          mediaType: type,
+          title: r.title || r.name,
+          overview: r.overview,
+          poster: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null,
+          popularity: r.popularity,
+          releaseDate: r.release_date || r.first_air_date
+        }));
+      } catch (apiError) {
+        console.error('TMDB API error:', apiError.message);
+        items = []; // Return empty array if TMDB fails
+      }
     }
+      
+    cache.set(cacheKey, items);
+    return res.json(items);
   } catch (err) {
     console.error('trending error', err);
     // Return empty array instead of 500 error

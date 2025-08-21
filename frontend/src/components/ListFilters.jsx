@@ -46,6 +46,7 @@ export default function ListFilters({ filters, onFiltersChange }) {
           onChange={e => handleFilterChange('sortBy', e.target.value)}
         >
           <option value="dateAdded">Date Added</option>
+          <option value="title">Title (A-Z)</option>
           <option value="rating">Rating</option>
           <option value="dateCompleted">Date Completed</option>
         </select>
@@ -86,6 +87,30 @@ export default function ListFilters({ filters, onFiltersChange }) {
           value={filters.maxRating || ''} 
           onChange={e => handleFilterChange('maxRating', e.target.value)}
           placeholder="1-10"
+        />
+      </div>
+
+      <div className="filter-group">
+        <label htmlFor="genres-filter">Genres (comma-separated):</label>
+        <input
+          id="genres-filter"
+          type="text"
+          value={filters.genres ? filters.genres.join(', ') : ''}
+          onChange={e => handleFilterChange('genres', e.target.value.split(',').map(g => g.trim()).filter(g => g !== ''))}
+          placeholder="e.g., Action, Drama"
+        />
+      </div>
+
+      <div className="filter-group">
+        <label htmlFor="release-year-filter">Release Year:</label>
+        <input
+          id="release-year-filter"
+          type="number"
+          min="1900" 
+          max={new Date().getFullYear() + 5} 
+          value={filters.releaseYear || ''}
+          onChange={e => handleFilterChange('releaseYear', e.target.value)}
+          placeholder="e.g., 2023"
         />
       </div>
 

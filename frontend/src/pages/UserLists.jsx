@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getFilteredLists, toggleSeason } from '../utils/api';
+import { getFilteredLists, toggleSeason, deleteListItem } from '../utils/api';
 import MediaCard from '../components/MediaCard';
 import ListFilters from '../components/ListFilters';
 
 export default function UserLists() {
   const { token } = useAuth();
   const [lists, setLists] = useState([]);
-  const [filters, setFilters] = useState({});
+  const [filters, setFilters] = useState(() => {
+    // Load filters from localStorage on component mount
+    const savedFilters = localStorage.getItem('list-filters');
+    return savedFilters ? JSON.parse(savedFilters) : {};
+  });
   const [loading, setLoading] = useState(true);
+  const [removeConfirm, setRemoveConfirm] = useState({ show: false, itemId: null, title: '' });
 
   const loadLists = async () => {
     try {
@@ -20,6 +25,20 @@ export default function UserLists() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Save filters to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('list-filters', JSON.stringify(filters));
+  }, [filters]);
+
+  const handleFiltersChange = (newFilters) => {
+    setFilters(newFilters);
+  };
+
+  const resetFilters = () => {
+    setFilters({});
+    localStorage.removeItem('list-filters');
   };
 
   useEffect(() => {
@@ -34,6 +53,26 @@ export default function UserLists() {
     } catch (err) {
       console.error('Error toggling season:', err);
     }
+  };
+
+  const handleRemoveRequest = (itemId, title) => {
+    setRemoveConfirm({ show: true, itemId, title });
+  };
+
+  const handleRemoveConfirm = async () => {
+    try {
+      await deleteListItem(token, removeConfirm.itemId);
+      // Remove from local state for immediate UI update
+      setLists(prevLists => prevLists.filter(item => item._id !== removeConfirm.itemId));
+      setRemoveConfirm({ show: false, itemId: null, title: '' });
+    } catch (err) {
+      console.error('Error removing item:', err);
+      alert('Failed to remove item. Please try again.');
+    }
+  };
+
+  const handleRemoveCancel = () => {
+    setRemoveConfirm({ show: false, itemId: null, title: '' });
   };
 
   const groupedLists = {
@@ -55,6 +94,7 @@ export default function UserLists() {
               item={item} 
               showProgress={true}
               onSeasonToggle={handleSeasonToggle}
+              onRemove={handleRemoveRequest}
             />
           ))}
         </div>
@@ -64,11 +104,18 @@ export default function UserLists() {
 
   return (
     <div className="user-lists">
-      <h1>My Lists</h1>
+      <div className="lists-header">
+        <h1>My Lists</h1>
+        {Object.keys(filters).length > 0 && (
+          <button className="reset-filters-btn" onClick={resetFilters}>
+            Reset Filters
+          </button>
+        )}
+      </div>
       
       <ListFilters 
         filters={filters} 
-        onFiltersChange={setFilters} 
+        onFiltersChange={handleFiltersChange} 
       />
 
       {loading ? (
@@ -102,6 +149,30 @@ export default function UserLists() {
             </div>
           )}
         </>
+      )}
+
+      {/* Remove Confirmation Modal */}
+      {removeConfirm.show && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>Remove from List</h3>
+            <p>Are you sure you want to remove "{removeConfirm.title}" from your list?</p>
+            <div className="modal-actions">
+              <button 
+                className="danger-btn"
+                onClick={handleRemoveConfirm}
+              >
+                Yes, Remove
+              </button>
+              <button 
+                className="secondary-btn"
+                onClick={handleRemoveCancel}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

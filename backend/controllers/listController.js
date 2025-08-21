@@ -124,6 +124,92 @@ const enrichItemWithMetadata = async (item) => {
   }
 };
 
+// Function to fetch comprehensive metadata for a new item
+const fetchAndProcessMetadata = async (apiId, mediaType) => {
+  try {
+    let metadata = {
+      title: 'Unknown Title',
+      poster: null,
+      overview: null,
+      releaseDate: null,
+      firstAirDate: null,
+      genres: [],
+      releaseYear: null
+    };
+
+    if (mediaType === 'movie' || mediaType === 'tv') {
+      const tmdbKey = process.env.TMDB_API_KEY;
+      if (tmdbKey) {
+        const response = await retryApiRequest(async () => {
+          return await axios.get(`https://api.themoviedb.org/3/${mediaType}/${apiId}`, {
+            params: { api_key: tmdbKey },
+            timeout: 15000,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              'Accept': 'application/json'
+            }
+          });
+        });
+
+        const data = response.data;
+        metadata.title = data.title || data.name;
+        metadata.poster = data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null;
+        metadata.overview = data.overview;
+        metadata.releaseDate = data.release_date;
+        metadata.firstAirDate = data.first_air_date;
+        metadata.genres = data.genres ? data.genres.map(g => g.name) : [];
+        metadata.releaseYear = data.release_date ? new Date(data.release_date).getFullYear() : (data.first_air_date ? new Date(data.first_air_date).getFullYear() : null);
+        console.log(`Successfully fetched TMDB metadata for ${mediaType} ${apiId}`);
+      } else {
+        console.warn('TMDB_API_KEY not configured, skipping TMDB metadata fetch');
+      }
+    } else if (mediaType === 'anime') {
+      const query = `
+        query ($id: Int) {
+          Media(id: $id, type: ANIME) {
+            title { english romaji native }
+            coverImage { large }
+            description
+            genres
+            startDate { year }
+          }
+        }
+      `;
+
+      const response = await retryApiRequest(async () => {
+        return await axios.post('https://graphql.anilist.co', {
+          query,
+          variables: { id: apiId }
+        }, { 
+          timeout: 15000,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      });
+
+      const data = response.data.data.Media;
+      metadata.title = data.title.english || data.title.romaji || data.title.native;
+      metadata.poster = data.coverImage?.large;
+      metadata.overview = data.description ? data.description.replace(/<[^>]+>/g, '') : null;
+      metadata.genres = data.genres || [];
+      metadata.releaseYear = data.startDate?.year || null;
+      console.log(`Successfully fetched AniList metadata for anime ${apiId}`);
+    }
+    return metadata;
+  } catch (error) {
+    console.error(`Failed to fetch comprehensive metadata for ${mediaType} ${apiId}:`, error.message);
+    return {
+      title: 'Unknown Title',
+      poster: null,
+      overview: null,
+      releaseDate: null,
+      firstAirDate: null,
+      genres: [],
+      releaseYear: null
+    };
+  }
+};
+
+
 // Helper to find a subdocument
 const findTrackedItem = (user, itemId) => user.trackedItems.id(itemId);
 
@@ -151,31 +237,44 @@ const sortItems = (items, sortBy = 'dateAdded', order = 'desc') => {
 const filterItems = (items, filters) => {
   return items.filter(item => {
     let match = true;
-    
+
     if (filters.mediaType && item.mediaType !== filters.mediaType) {
       match = false;
     }
-    
+
     if (filters.status && item.status !== filters.status) {
       match = false;
     }
-    
+
     if (filters.minRating && (!item.rating || item.rating < filters.minRating)) {
       match = false;
     }
-    
+
     if (filters.maxRating && (!item.rating || item.rating > filters.maxRating)) {
       match = false;
     }
-    
+
+    // New filters for genres and releaseYear
+    if (filters.genres && filters.genres.length > 0) {
+      const itemGenres = item.genres || [];
+      const filterGenres = Array.isArray(filters.genres) ? filters.genres : [filters.genres]; // Ensure filterGenres is an array
+      if (!filterGenres.every(g => itemGenres.includes(g))) {
+        match = false;
+      }
+    }
+
+    if (filters.releaseYear && item.releaseYear !== parseInt(filters.releaseYear)) {
+      match = false;
+    }
+
     return match;
   });
 };
 
 exports.addItem = async (req, res) => {
   try {
-    const { apiId, mediaType, status, title, poster, overview, releaseDate, firstAirDate } = req.body;
-    if (!apiId || !mediaType || !title) return res.status(400).json({ error: 'apiId, mediaType, and title required' });
+    const { apiId, mediaType, status } = req.body; // Remove title, poster, overview, releaseDate, firstAirDate from req.body
+    if (!apiId || !mediaType) return res.status(400).json({ error: 'apiId and mediaType required' });
 
     const user = await User.findById(req.user._id);
     // prevent duplicates: if same apiId+mediaType exists, update instead
@@ -184,14 +283,22 @@ exports.addItem = async (req, res) => {
       return res.status(400).json({ error: 'Item already tracked', item: existing });
     }
 
+    // Fetch comprehensive metadata
+    const metadata = await fetchAndProcessMetadata(apiId, mediaType);
+    if (!metadata.title) { // Ensure we have at least a title from metadata
+      return res.status(400).json({ error: 'Could not fetch metadata for the item' });
+    }
+
     const newItem = {
       apiId,
       mediaType,
-      title,
-      poster: poster || null,
-      overview: overview || null,
-      releaseDate: releaseDate || null,
-      firstAirDate: firstAirDate || null,
+      title: metadata.title,
+      poster: metadata.poster,
+      overview: metadata.overview,
+      releaseDate: metadata.releaseDate,
+      firstAirDate: metadata.firstAirDate,
+      genres: metadata.genres, // Add genres
+      releaseYear: metadata.releaseYear, // Add releaseYear
       status: status || 'planToWatch',
       dateAdded: new Date()
     };
@@ -298,7 +405,7 @@ exports.toggleSeason = async (req, res) => {
 // New endpoint to get filtered and sorted lists
 exports.getFilteredLists = async (req, res) => {
   try {
-    const { status, mediaType, sortBy, order, minRating, maxRating } = req.query;
+    const { status, mediaType, sortBy, order, minRating, maxRating, genres, releaseYear } = req.query;
     
     const user = await User.findById(req.user._id).select('trackedItems');
     
@@ -313,6 +420,12 @@ exports.getFilteredLists = async (req, res) => {
     if (mediaType) filters.mediaType = mediaType;
     if (minRating) filters.minRating = parseInt(minRating);
     if (maxRating) filters.maxRating = parseInt(maxRating);
+    // Handle single or comma-separated string for genres
+    if (genres && genres.length > 0) {
+      // If genres is a string (from a single query param), split it. Otherwise, assume it's an array.
+      filters.genres = typeof genres === 'string' ? genres.split(',').map(g => g.trim()).filter(Boolean) : genres;
+    }
+    if (releaseYear) filters.releaseYear = parseInt(releaseYear);
 
     items = filterItems(items, filters);
 

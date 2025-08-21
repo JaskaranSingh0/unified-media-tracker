@@ -1,9 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext'; // Import useTheme
 
 export default function Header() {
   const { token, user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme(); // Use the theme context
+
   return (
     <header className="site-header">
       <div className="container header-inner">
@@ -19,6 +22,9 @@ export default function Header() {
           ) : (
             <Link to="/login" className="nav-link">Login</Link>
           )}
+          <button onClick={toggleTheme} className="btn-ghost theme-toggle-btn">
+            {theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
+          </button>
         </nav>
       </div>
     </header>

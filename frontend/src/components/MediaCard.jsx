@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-export default function MediaCard({ item, showProgress = false, onSeasonToggle }) {
+export default function MediaCard({ item, showProgress = false, onSeasonToggle, onRemove }) {
   // item should be a partial object from backend or discovery
   const type = item.mediaType || (item.apiId && item.releaseDate ? 'movie' : 'movie');
   
@@ -67,6 +67,19 @@ export default function MediaCard({ item, showProgress = false, onSeasonToggle }
         </div>
       </Link>
       {renderSeasonTracker()}
+      {showProgress && onRemove && (
+        <button 
+          className="remove-btn"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onRemove(item._id, item.title);
+          }}
+          title={`Remove "${item.title}" from list`}
+        >
+          ×
+        </button>
+      )}
     </div>
   );
 }
