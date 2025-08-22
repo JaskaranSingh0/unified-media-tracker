@@ -6,6 +6,7 @@ import Search from './pages/Search';
 import MediaDetail from './pages/MediaDetail';
 import Settings from './pages/Settings';
 import UserLists from './pages/UserLists';
+import Onboarding from './pages/Onboarding';
 import Header from './components/Header';
 import { useAuth } from './context/AuthContext';
 
@@ -19,6 +20,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={token ? <Dashboard /> : <Navigate to="/login" />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/onboarding" element={token ? <Onboarding /> : <Navigate to="/login" />} />
           <Route path="/search" element={token ? <Search /> : <Navigate to="/login" />} />
           <Route path="/lists" element={token ? <UserLists /> : <Navigate to="/login" />} />
           <Route path="/media/:type/:id" element={token ? <MediaDetail /> : <Navigate to="/login" />} />

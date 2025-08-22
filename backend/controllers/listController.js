@@ -273,14 +273,16 @@ const filterItems = (items, filters) => {
 
 exports.addItem = async (req, res) => {
   try {
-    const { apiId, mediaType, status } = req.body; // Remove title, poster, overview, releaseDate, firstAirDate from req.body
-    if (!apiId || !mediaType) return res.status(400).json({ error: 'apiId and mediaType required' });
+    const { apiId, mediaType, status, rating, selfNote } = req.body; // Only allow specific fields from body
+    if (!apiId || !mediaType || !status) {
+      return res.status(400).json({ error: 'apiId, mediaType, and status are required' });
+    }
 
     const user = await User.findById(req.user._id);
     // prevent duplicates: if same apiId+mediaType exists, update instead
     const existing = user.trackedItems.find(t => t.apiId === apiId && t.mediaType === mediaType);
     if (existing) {
-      return res.status(400).json({ error: 'Item already tracked', item: existing });
+      return res.status(400).json({ error: 'Item already in your list', item: existing });
     }
 
     // Fetch comprehensive metadata
@@ -300,13 +302,15 @@ exports.addItem = async (req, res) => {
       genres: metadata.genres, // Add genres
       releaseYear: metadata.releaseYear, // Add releaseYear
       status: status || 'planToWatch',
+      rating: typeof rating === 'number' ? rating : undefined,
+      selfNote: typeof selfNote === 'string' ? selfNote : undefined,
       dateAdded: new Date()
     };
     user.trackedItems.push(newItem);
     await user.save();
     // return the last pushed element
     const added = user.trackedItems[user.trackedItems.length - 1];
-    return res.json({ item: added });
+    return res.json({ message: 'Item added to list', item: added });
   } catch (err) {
     console.error('addItem error', err);
     return res.status(500).json({ error: 'Server error' });

@@ -42,6 +42,29 @@ const retryTmdbRequest = async (requestFn, maxRetries = 3, baseDelay = 1000) => 
   }
 };
 
+/**
+ * @swagger
+ * /api/discover/search:
+ *   get:
+ *     summary: Search for movies, TV shows, and anime
+ *     description: Proxies to TMDB (movies/tv) and AniList (anime). Returns grouped results by media type.
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema: { type: string }
+ *         required: true
+ *         description: Search query
+ *       - in: query
+ *         name: type
+ *         schema: { type: string, enum: [movie, tv, anime] }
+ *         required: false
+ *         description: Restrict search to a media type
+ *     responses:
+ *       200:
+ *         description: Search results
+ *       400:
+ *         description: Missing query
+ */
 exports.search = async (req, res) => {
   try {
     const q = req.query.q;
@@ -153,6 +176,21 @@ exports.search = async (req, res) => {
   }
 };
 
+/**
+ * @swagger
+ * /api/discover/trending:
+ *   get:
+ *     summary: Get trending items by type
+ *     parameters:
+ *       - in: query
+ *         name: type
+ *         schema: { type: string, enum: [movie, tv, anime] }
+ *         required: false
+ *         description: Media type (default movie)
+ *     responses:
+ *       200:
+ *         description: Array of trending items
+ */
 exports.trending = async (req, res) => {
   try {
     const type = req.query.type || 'movie'; // movie | tv | anime
@@ -245,6 +283,130 @@ exports.trending = async (req, res) => {
   }
 };
 
+// Get latest releases: for movies/tv from TMDB's latest/now playing endpoints; for anime use AniList airing season
+/**
+ * @swagger
+ * /api/discover/latest:
+ *   get:
+ *     summary: Get latest/now playing items by type
+ *     parameters:
+ *       - in: query
+ *         name: type
+ *         schema: { type: string, enum: [movie, tv, anime] }
+ *         required: false
+ *         description: Media type (default movie)
+ *     responses:
+ *       200:
+ *         description: Array of latest items
+ */
+exports.latest = async (req, res) => {
+  try {
+    const type = req.query.type || 'movie'; // movie | tv | anime
+    const cacheKey = `latest:${type}`;
+    const cached = cache.get(cacheKey);
+    if (cached) return res.json(cached);
+
+    let items = [];
+
+    if (type === 'anime') {
+      // Use AniList for current season anime (approximation of latest)
+      const query = `
+        query ($season: MediaSeason, $year: Int) {
+          Page(page: 1, perPage: 20) {
+            media(season: $season, seasonYear: $year, type: ANIME, sort: POPULARITY_DESC) {
+              id
+              title { english romaji native }
+              coverImage { large }
+              description
+              genres
+              startDate { year month day }
+            }
+          }
+        }
+      `;
+
+      // Derive current season and year (simple mapping)
+      const now = new Date();
+      const month = now.getUTCMonth() + 1;
+      const year = now.getUTCFullYear();
+      const season = month <= 3 ? 'WINTER' : month <= 6 ? 'SPRING' : month <= 9 ? 'SUMMER' : 'FALL';
+
+      try {
+        const anilistRes = await axios.post('https://graphql.anilist.co', {
+          query,
+          variables: { season, year }
+        }, {
+          timeout: 15000,
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (anilistRes.data?.data?.Page?.media) {
+          items = anilistRes.data.data.Page.media.map(m => ({
+            apiId: m.id,
+            mediaType: 'anime',
+            title: m.title.english || m.title.romaji || m.title.native,
+            overview: m.description ? m.description.replace(/<[^>]*>/g, '') : '',
+            poster: m.coverImage?.large || null,
+            genres: m.genres,
+            releaseDate: `${m.startDate?.year || year}-01-01`
+          }));
+        }
+      } catch (err) {
+        console.error('AniList latest error:', err.message);
+        items = [];
+      }
+    } else {
+      if (!tmdbKey) return res.status(400).json({ error: 'TMDB_API_KEY not configured' });
+
+      try {
+        // For movies: use now_playing; for tv: use on_the_air
+        const path = type === 'movie' ? '/movie/now_playing' : '/tv/on_the_air';
+        const url = `${TMDB_BASE}${path}`;
+        const tmdbRes = await retryTmdbRequest(async () => {
+          return await axios.get(url, { params: { api_key: tmdbKey, region: 'US' }, ...tmdbAxiosConfig });
+        });
+        items = tmdbRes.data.results.map(r => ({
+          apiId: r.id,
+          mediaType: type,
+          title: r.title || r.name,
+          overview: r.overview,
+          poster: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null,
+          releaseDate: r.release_date || r.first_air_date
+        }));
+      } catch (err) {
+        console.error('TMDB latest error:', err.message);
+        items = [];
+      }
+    }
+
+    cache.set(cacheKey, items);
+    return res.json(items);
+  } catch (err) {
+    console.error('latest error', err);
+    return res.json([]);
+  }
+};
+
+/**
+ * @swagger
+ * /api/discover/details/{type}/{id}:
+ *   get:
+ *     summary: Get details for a media item
+ *     parameters:
+ *       - in: path
+ *         name: type
+ *         schema: { type: string, enum: [movie, tv, anime] }
+ *         required: true
+ *       - in: path
+ *         name: id
+ *         schema: { type: string }
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Media details
+ *       404:
+ *         description: Not found
+ */
 exports.getDetails = async (req, res) => {
   try {
     const { type, id } = req.params; // type: movie|tv|anime

@@ -17,10 +17,16 @@ export default function Login() {
     try {
       if (isRegister) {
         const res = await register({ email, username, password });
-        if (res.token) navigate('/');
+        if (res.token) {
+          // Redirect new users to onboarding
+          navigate('/onboarding');
+        }
       } else {
         const res = await login({ email, password });
-        if (res.token) navigate('/');
+        if (res.token) {
+          // Redirect existing users to dashboard
+          navigate('/');
+        }
       }
     } catch (err) {
       console.error(err);

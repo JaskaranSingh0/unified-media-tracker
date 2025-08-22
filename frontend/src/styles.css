@@ -1714,3 +1714,246 @@ body{
   gap: 12px;
   justify-content: center;
 }
+
+/* Onboarding Styles */
+.onboarding-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  background: var(--bg-color);
+  min-height: 100vh;
+}
+
+.onboarding-header {
+  text-align: center;
+  margin-bottom: 40px;
+  padding: 40px 20px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+}
+
+.onboarding-header h1 {
+  color: var(--accent);
+  margin-bottom: 15px;
+  font-size: 2.2rem;
+  font-weight: 600;
+}
+
+.onboarding-header p {
+  color: var(--muted-text);
+  font-size: 1.1rem;
+  margin-bottom: 30px;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.onboarding-actions {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.onboarding-content {
+  margin-bottom: 40px;
+}
+
+.onboarding-section {
+  margin-bottom: 50px;
+}
+
+.onboarding-section h3 {
+  color: var(--text-color);
+  font-size: 1.6rem;
+  font-weight: 600;
+  margin-bottom: 25px;
+  padding-left: 5px;
+  border-left: 4px solid var(--accent);
+}
+
+.onboarding-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 30px;
+}
+
+.onboarding-card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--card-shadow);
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.onboarding-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+.onboarding-card a {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.onboarding-card img {
+  width: 100%;
+  height: 280px;
+  object-fit: cover;
+  display: block;
+}
+
+.onboarding-card .placeholder {
+  width: 100%;
+  height: 280px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 500;
+}
+
+.onboarding-card .card-content {
+  padding: 15px;
+}
+
+.onboarding-card .title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  margin-bottom: 5px;
+  color: var(--text-color);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.onboarding-card .meta {
+  color: var(--muted-text);
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+}
+
+.quick-actions {
+  padding: 0 15px 15px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.quick-btn {
+  flex: 1;
+  min-width: 70px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.quick-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.plan-btn {
+  background: var(--warning);
+  color: white;
+}
+
+.plan-btn:hover:not(:disabled) {
+  background: #e68900;
+  transform: translateY(-1px);
+}
+
+.completed-btn {
+  background: var(--success);
+  color: white;
+}
+
+.completed-btn:hover:not(:disabled) {
+  background: #45a049;
+  transform: translateY(-1px);
+}
+
+.added-indicator {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--success);
+  color: white;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.onboarding-footer {
+  text-align: center;
+  padding: 30px 20px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+}
+
+.onboarding-footer p {
+  color: var(--muted-text);
+  margin-bottom: 20px;
+  font-size: 1rem;
+}
+
+/* Responsive design for onboarding */
+@media (max-width: 768px) {
+  .onboarding-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 15px;
+  }
+  
+  .onboarding-card img,
+  .onboarding-card .placeholder {
+    height: 240px;
+  }
+  
+  .onboarding-header h1 {
+    font-size: 1.8rem;
+  }
+  
+  .onboarding-header p {
+    font-size: 1rem;
+  }
+  
+  .quick-actions {
+    flex-direction: column;
+  }
+  
+  .quick-btn {
+    flex: none;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .onboarding-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .onboarding-container {
+    padding: 10px;
+  }
+  
+  .onboarding-header {
+    padding: 20px 15px;
+  }
+}
