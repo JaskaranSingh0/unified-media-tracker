@@ -49,12 +49,36 @@ export default function Dashboard() {
   }, [token]);
 
   const handleSeasonToggle = async (itemId, seasonNumber) => {
+    // Find the item to update optimistically
+    const originalLists = [...lists];
+    
+    // Optimistically update the season
+    setLists(prevLists => 
+      prevLists.map(item => {
+        if (item._id === itemId) {
+          const watchedSeasons = item.watchedSeasons || [];
+          const isWatched = watchedSeasons.includes(seasonNumber);
+          
+          return {
+            ...item,
+            watchedSeasons: isWatched 
+              ? watchedSeasons.filter(s => s !== seasonNumber)
+              : [...watchedSeasons, seasonNumber],
+            status: !isWatched && item.status === 'planToWatch' ? 'watching' : item.status
+          };
+        }
+        return item;
+      })
+    );
+
     try {
       await toggleSeason(token, itemId, seasonNumber);
-      // Reload the lists to reflect changes
+      // Reload to ensure consistency with server state
       load();
     } catch (err) {
       console.error('Error toggling season:', err);
+      // Revert the optimistic update
+      setLists(originalLists);
     }
   };
 
@@ -63,13 +87,21 @@ export default function Dashboard() {
   };
 
   const handleRemoveConfirm = async () => {
+    const originalLists = [...lists];
+    const itemIdToRemove = removeConfirm.itemId;
+
+    // Optimistically update the UI
+    setLists(prevLists => prevLists.filter(item => item._id !== itemIdToRemove));
+    setRemoveConfirm({ show: false, itemId: null, title: '' });
+
     try {
-      await deleteListItem(token, removeConfirm.itemId);
-      // Reload dashboard data
-      load();
-      setRemoveConfirm({ show: false, itemId: null, title: '' });
+      await deleteListItem(token, itemIdToRemove);
+      // Success - UI already updated
     } catch (err) {
       console.error('Error removing item:', err);
+      // Revert the optimistic update
+      setLists(originalLists);
+      setRemoveConfirm({ show: false, itemId: null, title: '' });
       alert('Failed to remove item. Please try again.');
     }
   };

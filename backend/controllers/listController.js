@@ -274,9 +274,7 @@ const filterItems = (items, filters) => {
 exports.addItem = async (req, res) => {
   try {
     const { apiId, mediaType, status, rating, selfNote } = req.body; // Only allow specific fields from body
-    if (!apiId || !mediaType || !status) {
-      return res.status(400).json({ error: 'apiId, mediaType, and status are required' });
-    }
+    // Validation is now handled by middleware, so we can remove manual checks
 
     const user = await User.findById(req.user._id);
     // prevent duplicates: if same apiId+mediaType exists, update instead

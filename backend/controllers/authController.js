@@ -14,9 +14,7 @@ exports.generateToken = genToken;
 exports.register = async (req, res) => {
   try {
     const { email, password, username } = req.body;
-    if (!email || !password || !username) {
-      return res.status(400).json({ error: 'Email, password, and username are required' });
-    }
+    // Validation is now handled by middleware, so we can remove manual checks
 
     let exists = await User.findOne({ email });
     if (exists) return res.status(400).json({ error: 'User already exists' });
@@ -24,7 +22,11 @@ exports.register = async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     const user = await User.create({ email, username, password: hashed });
     const token = genToken(user._id);
-    return res.json({ token, user: { _id: user._id, email: user.email, username: user.username } });
+    return res.status(201).json({ 
+      message: 'User registered successfully',
+      token, 
+      user: { _id: user._id, email: user.email, username: user.username } 
+    });
   } catch (err) {
     console.error('register error', err);
     return res.status(500).json({ error: 'Server error' });
@@ -34,8 +36,8 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
+    // Validation is now handled by middleware, so we can remove manual checks
 
-    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
     const user = await User.findOne({ email });
     if (!user || !user.password) return res.status(400).json({ error: 'Invalid credentials' });
 

@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
+const { checkSchema } = require('express-validator');
 const passport = require('passport');
 const authController = require('../controllers/authController');
 const auth = require('../middleware/auth');
+const { validate, registerSchema, loginSchema } = require('../middleware/validation');
 
 // Local auth routes
-router.post('/register', authController.register);
-router.post('/login', authController.login);
+router.post('/register', checkSchema(registerSchema), validate, authController.register);
+router.post('/login', checkSchema(loginSchema), validate, authController.login);
 router.get('/me', auth, authController.me);
 router.put('/me/password', auth, authController.updatePassword);
 router.delete('/me', auth, authController.deleteAccount);
